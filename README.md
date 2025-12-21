@@ -5,6 +5,7 @@
   <a href="https://github.com/vstorm-co/full-stack-fastapi-nextjs-llm-template/blob/main/LICENSE"><img src="https://img.shields.io/github/license/vstorm-co/full-stack-fastapi-nextjs-llm-template?color=blue" alt="License"></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue?logo=python&logoColor=white" alt="Python"></a>
   <a href="https://pypi.org/project/fastapi-fullstack/"><img src="https://img.shields.io/pypi/v/fastapi-fullstack?color=green&logo=pypi&logoColor=white" alt="PyPI"></a>
+  <img src="https://img.shields.io/badge/coverage-100%25-brightgreen" alt="Coverage">
   <img src="https://img.shields.io/badge/integrations-20%2B-brightgreen" alt="20+ Integrations">
 </p>
 
@@ -86,7 +87,7 @@ This template gives you all of that out of the box, with **20+ configurable inte
 ## 🎬 Demo
 
 <p align="center">
-  <img src="assets/app_start.gif" alt="FastAPI Fullstack Generator Demo" width="800">
+  <img src="assets/app_start.gif" alt="FastAPI Fullstack Generator Demo">
 </p>
 
 ### Screenshots
