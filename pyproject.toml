@@ -68,9 +68,9 @@ docs = [
 fastapi-fullstack = "fastapi_gen.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/vstorm-co/full-stack-fastapi-nextjs-llm-template"
-Documentation = "https://github.com/vstorm-co/full-stack-fastapi-nextjs-llm-template#readme"
-Repository = "https://github.com/vstorm-co/full-stack-fastapi-nextjs-llm-template"
+Homepage = "https://github.com/vstorm-co/full-stack-ai-agent-template"
+Documentation = "https://github.com/vstorm-co/full-stack-ai-agent-template#readme"
+Repository = "https://github.com/vstorm-co/full-stack-ai-agent-template"
 
 [build-system]
 requires = ["hatchling"]
