@@ -8,6 +8,8 @@
   <a href="#-quick-start">Quick Start</a> •
   <a href="#-features">Features</a> •
   <a href="#-demo">Demo</a> •
+  <a href="https://template.vstorm.co/">Website</a> •
+  <a href="https://template.vstorm.co/configurator/">Configurator</a> •
   <a href="https://pypi.org/project/fastapi-fullstack/">PyPI</a> •
   <a href="#-documentation">Docs</a>
 </p>
