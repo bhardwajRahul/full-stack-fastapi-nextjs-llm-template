@@ -220,3 +220,12 @@ class ConversationWithLatestMessage(ConversationRead):
 
     latest_message: MessageReadSimple | None = None
     message_count: int = 0
+
+
+{%- if cookiecutter.use_jwt %}
+class ConversationAdminList(BaseSchema):
+    """Schema for admin conversation list with message counts."""
+
+    items: list[ConversationWithLatestMessage]
+    total: int
+{%- endif %}

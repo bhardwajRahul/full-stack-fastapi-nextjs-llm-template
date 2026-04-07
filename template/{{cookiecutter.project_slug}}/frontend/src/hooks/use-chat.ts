@@ -56,7 +56,7 @@ export function useChat() {
         const newMsgId = nanoid();
 {%- if cookiecutter.use_database %}
         // Use current conversationId from store to avoid closure issues
-        const effectiveConversationId = currentConversationIdFromStore || conversationId || "";
+        const effectiveConversationId = currentConversationIdFromStore || conversationId;
 {%- endif %}
         addMessage({
           id: newMsgId,
@@ -68,6 +68,7 @@ export function useChat() {
           groupId: currentGroupIdRef.current || undefined,
 {%- if cookiecutter.use_database %}
           conversationId: effectiveConversationId,
+          isTemporaryId: true,
 {%- endif %}
         });
         setCurrentMessageId(newMsgId);
@@ -83,7 +84,7 @@ export function useChat() {
           // Update all messages that don't have a conversationId yet
           const { updateMessagesWhere } = useChatStore.getState();
           updateMessagesWhere(
-            (msg) => !msg.conversationId || msg.conversationId === "",
+            (msg) => !msg.conversationId,
             (msg) => ({ ...msg, conversationId: conversation_id })
           );
           onConversationCreated?.(conversation_id);
@@ -98,14 +99,15 @@ export function useChat() {
             updateMessage(currentMessageId, (msg) => ({
               ...msg,
               id: message_id,
+              isTemporaryId: false,
             }));
           } else {
-            // Fallback: find the most recent assistant message with a temp ID (nanoid pattern)
+            // Fallback: find the most recent assistant message with a temp ID
             // This handles cases where currentMessageId was already cleared
             const { updateMessagesWhere } = useChatStore.getState();
             updateMessagesWhere(
-              (msg) => msg.role === "assistant" && msg.id.length > 20 && !msg.id.includes("-"),
-              (msg) => ({ ...msg, id: message_id })
+              (msg) => msg.role === "assistant" && !!msg.isTemporaryId,
+              (msg) => ({ ...msg, id: message_id, isTemporaryId: false })
             );
           }
           break;
@@ -427,7 +429,7 @@ export function useChat() {
         content,
         timestamp: new Date(),
 {%- if cookiecutter.use_database %}
-        conversationId: conversationId ?? "",
+        conversationId: conversationId || undefined,
 {%- endif %}
         fileIds,
       });
@@ -464,7 +466,7 @@ export function useChat() {
           content,
           timestamp: new Date(),
 {%- if cookiecutter.use_database %}
-          conversationId: conversationId ?? "",
+          conversationId: conversationId || undefined,
 {%- endif %}
           fileIds
         });

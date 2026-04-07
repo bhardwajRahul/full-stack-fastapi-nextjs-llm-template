@@ -27,7 +27,9 @@ export interface ChatMessage {
   fileIds?: string[];
 {%- if cookiecutter.use_jwt %}
   /** Conversation ID for this message */
-  conversationId: string;
+  conversationId?: string;
+  /** True if message ID is a temporary nanoid, not yet replaced by server ID */
+  isTemporaryId?: boolean;
   /** Current user's rating */
   user_rating?: UserRating;
   /** Aggregate rating counts */

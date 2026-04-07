@@ -8,8 +8,21 @@ import { backendFetch } from "@/lib/server-api";
  * as JSON so that client-side code can use it for WebSocket connections.
  *
  * The token is validated with the backend before being returned.
+ *
+ * SECURITY NOTE: This endpoint converts an httpOnly cookie into a JSON
+ * response readable by JavaScript. This is a deliberate tradeoff: WebSocket
+ * connections require the token in a URL parameter or header, but httpOnly
+ * cookies are not accessible from JS. The Origin header check below restricts
+ * access to same-origin requests, limiting exposure to XSS attacks.
  */
 export async function GET(request: NextRequest) {
+  // Restrict to same-origin requests to limit XSS exposure
+  const origin = request.headers.get("origin");
+  const host = request.headers.get("host");
+  if (origin && host && !origin.includes(host)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const accessToken = request.cookies.get("access_token")?.value;
 
   if (!accessToken) {

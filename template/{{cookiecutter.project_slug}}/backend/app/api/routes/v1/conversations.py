@@ -43,6 +43,9 @@ from app.schemas.conversation import (
     MessageList,
     MessageRead,
     MessageReadSimple,
+{%- if cookiecutter.use_jwt %}
+    ConversationAdminList,
+{%- endif %}
 )
 {%- if cookiecutter.use_jwt %}
 from app.schemas.message_rating import (
@@ -68,6 +71,30 @@ async def export_conversations(
     export_data = await conversation_service.export_all()
     return JSONResponse(content={"conversations": export_data, "total": len(export_data)},
         headers={"Content-Disposition": 'attachment; filename="conversations_export.json"'})
+
+
+{%- if cookiecutter.use_jwt %}
+@router.get("/admin-list", response_model=ConversationAdminList)
+async def list_conversations_admin(
+    conversation_service: ConversationSvc,
+    current_user: CurrentAdmin,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
+    include_archived: bool = Query(True, description="Include archived conversations"),
+    search: str | None = Query(None, max_length=100, description="Search by title or ID prefix"),
+) -> Any:
+    """List all conversations with message counts (admin only).
+
+    Returns paginated conversations without message content.
+    """
+    items, total = await conversation_service.list_conversations_admin(
+        skip=skip,
+        limit=limit,
+        include_archived=include_archived,
+        search=search,
+    )
+    return ConversationAdminList(items=items, total=total)
+{%- endif %}
 
 
 @router.get("", response_model=ConversationList)
@@ -328,6 +355,30 @@ def export_conversations(
         headers={"Content-Disposition": 'attachment; filename="conversations_export.json"'})
 
 
+{%- if cookiecutter.use_jwt %}
+@router.get("/admin-list", response_model=ConversationAdminList)
+def list_conversations_admin(
+    conversation_service: ConversationSvc,
+    current_user: CurrentAdmin,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
+    include_archived: bool = Query(True, description="Include archived conversations"),
+    search: str | None = Query(None, max_length=100, description="Search by title or ID prefix"),
+) -> Any:
+    """List all conversations with message counts (admin only).
+
+    Returns paginated conversations without message content.
+    """
+    items, total = conversation_service.list_conversations_admin(
+        skip=skip,
+        limit=limit,
+        include_archived=include_archived,
+        search=search,
+    )
+    return ConversationAdminList(items=items, total=total)
+{%- endif %}
+
+
 @router.get("", response_model=ConversationList)
 def list_conversations(
     conversation_service: ConversationSvc,
@@ -571,6 +622,32 @@ def remove_rating(
 
 
 {%- elif cookiecutter.use_mongodb %}
+
+
+{%- if cookiecutter.use_jwt %}
+@router.get("/admin-list", response_model=ConversationAdminList)
+async def list_conversations_admin(
+    conversation_service: ConversationSvc,
+    current_user: CurrentAdmin,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
+    include_archived: bool = Query(True, description="Include archived conversations"),
+    search: str | None = Query(None, max_length=100, description="Search by title or ID prefix"),
+) -> Any:
+    """List all conversations with message counts (admin only).
+
+    Returns paginated conversations without message content.
+    """
+    items, total = await conversation_service.list_conversations_admin(
+        skip=skip,
+        limit=limit,
+        include_archived=include_archived,
+        search=search,
+    )
+    return ConversationAdminList(items=items, total=total)
+
+
+{%- endif %}
 
 
 @router.get("", response_model=ConversationList)

@@ -40,18 +40,22 @@ export default function AdminRatingsPage() {
     setLoading(true);
     setError(null);
     try {
+      const ratingsParams = new URLSearchParams({
+        skip: String(page * PAGE_SIZE),
+        limit: String(PAGE_SIZE),
+        with_comments_only: String(commentsOnly),
+      });
+      if (filter !== "all") {
+        ratingsParams.set("rating_filter", filter === "positive" ? "1" : "-1");
+      }
+
       const [summaryRes, ratingsRes] = await Promise.all([
         fetch("/api/v1/admin/ratings/summary?days=30", {
           credentials: "include",
         }),
-        fetch(
-          `/api/v1/admin/ratings?skip=${
-            page * PAGE_SIZE
-          }&limit=${PAGE_SIZE}&rating_filter=${
-            filter === "all" ? "" : filter === "positive" ? "1" : "-1"
-          }&with_comments_only=${commentsOnly}`,
-          { credentials: "include" }
-        ),
+        fetch(`/api/v1/admin/ratings?${ratingsParams.toString()}`, {
+          credentials: "include",
+        }),
       ]);
 
       if (!summaryRes.ok && !ratingsRes.ok) {
@@ -84,6 +88,8 @@ export default function AdminRatingsPage() {
     // Remove empty params
     if (!params.get("rating_filter")) params.delete("rating_filter");
 
+    // Note: window.open relies on the browser automatically sending cookies
+    // (httpOnly access_token) to the Next.js proxy route for authentication.
     window.open(`/api/v1/admin/ratings/export?${params.toString()}`, "_blank");
   };
 

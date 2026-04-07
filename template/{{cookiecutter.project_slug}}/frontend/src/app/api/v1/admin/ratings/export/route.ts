@@ -23,6 +23,7 @@ export async function GET(request: NextRequest) {
       headers: {
         Authorization: `Bearer ${accessToken}`,
       },
+      raw: export_format === "csv",
     });
 
     const filename = `ratings_export_${new Date().toISOString().slice(0, 10)}.${export_format}`;

@@ -1,84 +1,83 @@
 "use client";
 
 {%- if cookiecutter.use_jwt %}
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAuthStore } from "@/stores";
-import { apiClient } from "@/lib/api-client";
-import type { Conversation } from "@/types";
 import { formatDate } from "@/lib/utils";
 import { Skeleton } from "@/components/ui";
 import Link from "next/link";
 import { ExternalLink, Search } from "lucide-react";
 
-interface ConversationExport {
-  conversations: Array<{
-    id: string;
-    title: string | null;
-    created_at: string;
-    updated_at: string;
-    is_archived: boolean;
-    messages: Array<{
-      id: string;
-      role: string;
-      content: string;
-      created_at: string;
-    }>;
-  }>;
+interface ConversationAdminItem {
+  id: string;
+  title: string | null;
+  created_at: string;
+  updated_at: string;
+  is_archived: boolean;
+  message_count: number;
+}
+
+interface ConversationAdminListResponse {
+  items: ConversationAdminItem[];
   total: number;
 }
 
+const PAGE_SIZE = 50;
+
 export default function AdminConversationsPage() {
   const { user } = useAuthStore();
-  const [conversations, setConversations] = useState<ConversationExport["conversations"]>([]);
+  const [conversations, setConversations] = useState<ConversationAdminItem[]>([]);
   const [total, setTotal] = useState<number>(0);
-  const [filtered, setFiltered] = useState<ConversationExport["conversations"]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [showArchived, setShowArchived] = useState(false);
+  const [page, setPage] = useState(0);
+
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(0);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const fetchConversations = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams({
+        skip: String(page * PAGE_SIZE),
+        limit: String(PAGE_SIZE),
+        include_archived: String(showArchived),
+      });
+      if (debouncedSearch) params.set("search", debouncedSearch);
+
+      const response = await fetch(`/api/v1/admin/conversations?${params.toString()}`, {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to fetch conversations");
+
+      const data: ConversationAdminListResponse = await response.json();
+      setConversations(data.items);
+      setTotal(data.total);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to fetch conversations";
+      setError(errorMessage);
+      console.error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  }, [page, showArchived, debouncedSearch]);
 
   useEffect(() => {
     if (user?.role !== "admin") return;
-
-    const fetchConversations = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const data = await apiClient.get<ConversationExport>("/v1/admin/conversations");
-        setConversations(data.conversations);
-        setTotal(data.total);
-        setFiltered(data.conversations);
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : "Failed to fetch conversations";
-        setError(errorMessage);
-        console.error(errorMessage);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchConversations();
-  }, [user]);
-
-  useEffect(() => {
-    let filtered = conversations;
-
-    // Filter by archived status
-    if (!showArchived) {
-      filtered = filtered.filter(c => !c.is_archived);
-    }
-
-    // Filter by search
-    if (search) {
-      const lowerSearch = search.toLowerCase();
-      filtered = filtered.filter(c =>
-        c.title?.toLowerCase().includes(lowerSearch) ||
-        c.id.toLowerCase().includes(lowerSearch)
-      );
-    }
-
-    setFiltered(filtered);
-  }, [search, showArchived, conversations]);
+  }, [user, fetchConversations]);
 
   if (user?.role !== "admin") {
     return (
@@ -134,7 +133,10 @@ export default function AdminConversationsPage() {
           <input
             type="checkbox"
             checked={showArchived}
-            onChange={(e) => setShowArchived(e.target.checked)}
+            onChange={(e) => {
+              setShowArchived(e.target.checked);
+              setPage(0);
+            }}
             className="rounded"
           />
           Show archived
@@ -143,7 +145,7 @@ export default function AdminConversationsPage() {
 
       {/* Stats */}
       <div className="mb-4 text-sm text-muted-foreground">
-        Showing {filtered.length} of {total ?? conversations.length} conversations
+        Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total} conversations
       </div>
 
       {/* Conversations List */}
@@ -159,7 +161,7 @@ export default function AdminConversationsPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((conv) => (
+            {conversations.map((conv) => (
               <tr key={conv.id} className="border-b hover:bg-muted/50">
                 <td className="p-4 text-sm">
                   {formatDate(conv.created_at)}
@@ -171,7 +173,7 @@ export default function AdminConversationsPage() {
                   </div>
                 </td>
                 <td className="p-4 text-sm text-muted-foreground">
-                  {conv.messages.length}
+                  {conv.message_count}
                 </td>
                 <td className="p-4">
                   {conv.is_archived ? (
@@ -195,16 +197,48 @@ export default function AdminConversationsPage() {
                 </td>
               </tr>
             ))}
-            {filtered.length === 0 && (
+            {conversations.length === 0 && (
               <tr>
                 <td colSpan={5} className="p-8 text-center text-muted-foreground">
                   No conversations found
                 </td>
               </tr>
             )}
+            {loading && conversations.length > 0 && (
+              <tr>
+                <td colSpan={5} className="p-4">
+                  <div className="flex justify-center">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                  </div>
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex justify-center gap-2 p-4">
+          <button
+            onClick={() => setPage(Math.max(0, page - 1))}
+            disabled={page === 0}
+            className="px-3 py-1 rounded hover:bg-muted disabled:opacity-50"
+          >
+            Previous
+          </button>
+          <span className="px-3 py-1">
+            Page {page + 1} of {totalPages}
+          </span>
+          <button
+            onClick={() => setPage(Math.min(totalPages - 1, page + 1))}
+            disabled={page >= totalPages - 1}
+            className="px-3 py-1 rounded hover:bg-muted disabled:opacity-50"
+          >
+            Next
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -9,7 +9,23 @@ export async function GET(request: NextRequest) {
     if ("error" in adminCheck) return adminCheck.error;
     const { accessToken } = adminCheck;
 
-    const data = await backendFetch("/api/v1/conversations/export", {
+    // Forward query params to backend admin-list endpoint
+    const searchParams = request.nextUrl.searchParams;
+    const params = new URLSearchParams();
+    const skip = searchParams.get("skip");
+    const limit = searchParams.get("limit");
+    const includeArchived = searchParams.get("include_archived");
+    const search = searchParams.get("search");
+
+    if (skip) params.set("skip", skip);
+    if (limit) params.set("limit", limit);
+    if (includeArchived) params.set("include_archived", includeArchived);
+    if (search) params.set("search", search);
+
+    const qs = params.toString();
+    const url = `/api/v1/conversations/admin-list${qs ? `?${qs}` : ""}`;
+
+    const data = await backendFetch(url, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
       },
