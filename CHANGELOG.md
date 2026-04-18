@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Message rating feature** — Users can rate AI assistant messages with thumbs up/down and optional feedback comments. Toggle behavior: clicking same button removes rating, clicking opposite button changes it. Only assistant messages are rateable
+  - **Backend:** `MessageRating` model (PostgreSQL/SQLite/MongoDB, SQLAlchemy/SQLModel), repository + service + schema layers, `POST /conversations/{id}/messages/{messageId}/rate` endpoint. Ratings persisted to `message_ratings` table with unique constraint per user/message and `CHECK` constraint on rating values (1/-1). Optional comment field (up to 2000 chars). Supports all 3 database variants
+  - **Admin API:** `GET /admin/ratings` (paginated list with filters), `GET /admin/ratings/summary` (aggregate stats), `GET /admin/ratings/export` (CSV/JSON download). `GET /admin/conversations` (paginated listing). All admin routes require admin role
+  - **WebSocket integration:** Ratings data (user's rating, like/dislike counts) included in streaming message events and conversation history loading
+  - **Frontend:** `RatingButtons` component with like/dislike icons, comment dialog on dislike, optimistic count updates. Integrated into `message-item.tsx` for assistant messages. Admin pages for ratings management and conversations listing
+  - **Frontend proxy routes:** `POST/DELETE /api/conversations/{id}/messages/{messageId}/rate` proxies, `GET /api/v1/admin/ratings`, `/summary`, `/export` routes, `lib/admin-auth.ts` utility for admin API calls
+  - **Documentation:** `docs/howto/use-ratings.md` user guide, updated `docs/architecture.md` and `docs/permissions.md`
+  - **Tests:** 660+ lines of tests covering config validation, model generation, repository/service/route layers, all database variants
+
+### Security
+
+- **Removed JWT from WebSocket URL query string** — WS auth now uses `Sec-WebSocket-Protocol` (`access_token.<JWT>`) instead of `?token=...`, so tokens no longer leak into access logs or `Referer` headers. Backend echoes the chosen application subprotocol back on `accept()`
+- **Removed `/api/auth/token` httpOnly downgrade endpoint** — `access_token` is now returned in the body of `/auth/login`, `/auth/me`, and `/auth/refresh` proxy responses and kept in memory only (never persisted)
+- **CSV export injection hardening** — Admin ratings CSV export now prefixes cells starting with `= + - @` (or tab/CR) with a single quote, preventing formula execution when opened in Excel/Sheets
+- **Rating comments stored raw** — Dropped `html.escape` from comment sanitization; comments are rendered via React (auto-escaped) and CSV-escaped separately, so the DB stores original text
+
+### Changed
+
+- **Streaming admin ratings CSV export** — `/admin/ratings/export?export_format=csv` now streams row-by-row via an async/sync generator instead of buffering the whole dataset in memory
+
 ## [0.2.5] - 2026-04-12
 
 ### Added

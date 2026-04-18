@@ -357,6 +357,7 @@ Generated projects include **CLAUDE.md** and **AGENTS.md** files optimized for A
 - **Messaging Channels** - Telegram and Slack multi-bot integration with polling, webhooks, per-thread sessions, group concurrency control
 - **Conversation Sharing** - Share conversations with users or via public links, admin conversation browser
 - **Conversation Persistence** - Save chat history to database
+- **Message Ratings** - Like/dislike responses with feedback, admin analytics
 - **Image Description** - Extract images from documents, describe via LLM vision
 - **Multimodal Embeddings** - Google Gemini embedding model (text + images)
 - **Document Sources** - Local files, API upload, Google Drive, S3/MinIO
