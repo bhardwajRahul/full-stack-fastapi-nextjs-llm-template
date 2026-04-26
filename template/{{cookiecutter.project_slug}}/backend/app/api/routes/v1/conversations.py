@@ -19,7 +19,7 @@ from uuid import UUID
 from typing import Any
 {%- endif %}
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Query, Response, status
 from fastapi.responses import JSONResponse
 
 {%- if cookiecutter.use_mongodb %}
@@ -28,7 +28,7 @@ from app.api.deps import ConversationSvc
 from app.api.deps import DBSession, ConversationSvc
 {%- endif %}
 {%- if cookiecutter.use_jwt %}
-from app.api.deps import CurrentAdmin, CurrentUser
+from app.api.deps import ConversationShareSvc, CurrentAdmin, CurrentUser
 {%- if cookiecutter.use_database %}
 from app.api.deps import MessageRatingSvc
 {%- endif %}
@@ -48,6 +48,7 @@ from app.schemas.conversation import (
 {%- endif %}
 )
 {%- if cookiecutter.use_jwt %}
+from app.schemas.conversation_share import ConversationShareCreate, ConversationShareList, ConversationShareRead
 from app.schemas.message_rating import (
     MessageRatingCreate,
     MessageRatingRead,
@@ -64,7 +65,7 @@ router = APIRouter()
 async def export_conversations(
     conversation_service: ConversationSvc,
 {%- if cookiecutter.use_jwt %}
-    current_user: CurrentAdmin,
+    _: CurrentAdmin,
 {%- endif %}
 ) -> Any:
     """Export all conversations with messages and tool calls (admin only)."""
@@ -77,7 +78,7 @@ async def export_conversations(
 @router.get("/admin-list", response_model=ConversationAdminList)
 async def list_conversations_admin(
     conversation_service: ConversationSvc,
-    current_user: CurrentAdmin,
+    _: CurrentAdmin,
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     include_archived: bool = Query(True, description="Include archived conversations"),
@@ -137,7 +138,7 @@ async def create_conversation(
     if data is None:
         data = ConversationCreate()
 {%- if cookiecutter.use_jwt %}
-    data.user_id = current_user.id
+    data = data.model_copy(update={"user_id": current_user.id})
 {%- endif %}
     return await conversation_service.create_conversation(data)
 
@@ -275,9 +276,6 @@ async def add_message(
 {%- if cookiecutter.use_jwt %}
 
 
-# Message Rating Endpoints
-
-
 @router.post(
     "/{conversation_id}/messages/{message_id}/rate",
     response_model=MessageRatingRead,
@@ -289,6 +287,7 @@ async def rate_message(
     data: MessageRatingCreate,
     rating_service: MessageRatingSvc,
     current_user: CurrentUser,
+    response: Response,
 ) -> Any:
     """Rate an assistant message.
 
@@ -301,14 +300,16 @@ async def rate_message(
         data: Rating value (1 for like, -1 for dislike) and optional comment
 
     Returns:
-        200 OK
+        201 Created for new rating, 200 OK when updating existing rating.
     """
-    rating, _ = await rating_service.rate_message(
+    rating, is_new = await rating_service.rate_message(
         conversation_id=conversation_id,
         message_id=message_id,
         user_id=current_user.id,
         data=data,
     )
+    if is_new:
+        response.status_code = status.HTTP_201_CREATED
     return rating
 
 
@@ -346,7 +347,7 @@ async def remove_rating(
 def export_conversations(
     conversation_service: ConversationSvc,
 {%- if cookiecutter.use_jwt %}
-    current_user: CurrentAdmin,
+    _: CurrentAdmin,
 {%- endif %}
 ) -> Any:
     """Export all conversations with messages and tool calls (admin only)."""
@@ -359,7 +360,7 @@ def export_conversations(
 @router.get("/admin-list", response_model=ConversationAdminList)
 def list_conversations_admin(
     conversation_service: ConversationSvc,
-    current_user: CurrentAdmin,
+    _: CurrentAdmin,
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     include_archived: bool = Query(True, description="Include archived conversations"),
@@ -419,7 +420,7 @@ def create_conversation(
     if data is None:
         data = ConversationCreate()
 {%- if cookiecutter.use_jwt %}
-    data.user_id = str(current_user.id)
+    data = data.model_copy(update={"user_id": str(current_user.id)})
 {%- endif %}
     return conversation_service.create_conversation(data)
 
@@ -557,9 +558,6 @@ def add_message(
 {%- if cookiecutter.use_jwt %}
 
 
-# Message Rating Endpoints
-
-
 @router.post(
     "/{conversation_id}/messages/{message_id}/rate",
     response_model=MessageRatingRead,
@@ -571,6 +569,7 @@ def rate_message(
     data: MessageRatingCreate,
     rating_service: MessageRatingSvc,
     current_user: CurrentUser,
+    response: Response,
 ) -> Any:
     """Rate an assistant message.
 
@@ -583,14 +582,16 @@ def rate_message(
         data: Rating value (1 for like, -1 for dislike) and optional comment
 
     Returns:
-        200 OK
+        201 Created for new rating, 200 OK when updating existing rating.
     """
-    rating, _ = rating_service.rate_message(
+    rating, is_new = rating_service.rate_message(
         conversation_id=conversation_id,
         message_id=message_id,
         user_id=str(current_user.id),
         data=data,
     )
+    if is_new:
+        response.status_code = status.HTTP_201_CREATED
     return rating
 
 
@@ -628,7 +629,7 @@ def remove_rating(
 @router.get("/admin-list", response_model=ConversationAdminList)
 async def list_conversations_admin(
     conversation_service: ConversationSvc,
-    current_user: CurrentAdmin,
+    _: CurrentAdmin,
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     include_archived: bool = Query(True, description="Include archived conversations"),
@@ -690,7 +691,7 @@ async def create_conversation(
     if data is None:
         data = ConversationCreate()
 {%- if cookiecutter.use_jwt %}
-    data.user_id = str(current_user.id)
+    data = data.model_copy(update={"user_id": str(current_user.id)})
 {%- endif %}
     return await conversation_service.create_conversation(data)
 
@@ -828,9 +829,6 @@ async def add_message(
 {%- if cookiecutter.use_jwt %}
 
 
-# Message Rating Endpoints
-
-
 @router.post(
     "/{conversation_id}/messages/{message_id}/rate",
     response_model=MessageRatingRead,
@@ -842,6 +840,7 @@ async def rate_message(
     data: MessageRatingCreate,
     rating_service: MessageRatingSvc,
     current_user: CurrentUser,
+    response: Response,
 ) -> Any:
     """Rate an assistant message.
 
@@ -854,14 +853,16 @@ async def rate_message(
         data: Rating value (1 for like, -1 for dislike) and optional comment
 
     Returns:
-        200 OK
+        201 Created for new rating, 200 OK when updating existing rating.
     """
-    rating, _ = await rating_service.rate_message(
+    rating, is_new = await rating_service.rate_message(
         conversation_id=conversation_id,
         message_id=message_id,
         user_id=str(current_user.id),
         data=data,
     )
+    if is_new:
+        response.status_code = status.HTTP_201_CREATED
     return rating
 
 
@@ -895,11 +896,6 @@ async def remove_rating(
 {%- endif %}
 
 {%- if cookiecutter.use_jwt %}
-
-# Sharing endpoints
-
-from app.api.deps import ConversationShareSvc
-from app.schemas.conversation_share import ConversationShareCreate, ConversationShareList, ConversationShareRead
 
 
 {%- if cookiecutter.use_postgresql %}

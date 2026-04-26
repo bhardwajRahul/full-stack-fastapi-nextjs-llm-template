@@ -118,10 +118,11 @@ class FileUploadService:
                 temp_path = f.name
             try:
                 client = AsyncLlamaCloud(api_key=settings.LLAMAPARSE_API_KEY)
-                result = await client.parsing.upload_and_parse(
-                    file=open(temp_path, "rb"),
-                    tier=settings.LLAMAPARSE_TIER,
-                )
+                with open(temp_path, "rb") as pdf_file:
+                    result = await client.parsing.upload_and_parse(
+                        file=pdf_file,
+                        tier=settings.LLAMAPARSE_TIER,
+                    )
                 return "\n\n".join(p.markdown for p in result.pages) if result.pages else None
             finally:
                 os.unlink(temp_path)
@@ -247,7 +248,10 @@ class FileUploadService:
         parsed_content: str | None = None,
     ) -> ChatFile:
         """Create a chat file record in the database."""
-        chat_file = ChatFile(
+        from app.repositories import chat_file_repo
+
+        return await chat_file_repo.create(
+            self.db,
             user_id=user_id,
             filename=filename,
             mime_type=mime_type,
@@ -256,11 +260,6 @@ class FileUploadService:
             file_type=file_type,
             parsed_content=parsed_content,
         )
-        self.db.add(chat_file)
-        await self.db.flush()
-        await self.db.commit()
-        await self.db.refresh(chat_file)
-        return chat_file
 
 
 {%- elif cookiecutter.use_jwt and cookiecutter.use_sqlite %}
@@ -385,10 +384,11 @@ class FileUploadService:
                 async def _parse():
                     from llama_cloud import AsyncLlamaCloud
                     client = AsyncLlamaCloud(api_key=settings.LLAMAPARSE_API_KEY)
-                    result = await client.parsing.upload_and_parse(
-                        file=open(temp_path, "rb"),
-                        tier=settings.LLAMAPARSE_TIER,
-                    )
+                    with open(temp_path, "rb") as pdf_file:
+                        result = await client.parsing.upload_and_parse(
+                            file=pdf_file,
+                            tier=settings.LLAMAPARSE_TIER,
+                        )
                     return "\n\n".join(p.markdown for p in result.pages) if result.pages else None
 
                 return asyncio.run(_parse())
@@ -516,7 +516,10 @@ class FileUploadService:
         parsed_content: str | None = None,
     ) -> ChatFile:
         """Create a chat file record in the database."""
-        chat_file = ChatFile(
+        from app.repositories import chat_file_repo
+
+        return chat_file_repo.create(
+            self.db,
             user_id=user_id,
             filename=filename,
             mime_type=mime_type,
@@ -525,11 +528,6 @@ class FileUploadService:
             file_type=file_type,
             parsed_content=parsed_content,
         )
-        self.db.add(chat_file)
-        self.db.flush()
-        self.db.commit()
-        self.db.refresh(chat_file)
-        return chat_file
 
 
 {%- else %}

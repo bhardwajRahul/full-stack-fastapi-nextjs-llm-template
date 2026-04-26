@@ -1,10 +1,15 @@
 import logging
+import re
 from abc import ABC, abstractmethod
 from typing import Any
 
 from app.rag.models import CollectionInfo, Document, DocumentPageChunk, SearchResult, DocumentInfo
+from app.schemas.rag import RAGDocumentItem, RAGDocumentList
 
 logger = logging.getLogger(__name__)
+
+_COLLECTION_NAME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_]{0,63}$")
+_RESERVED_COLLECTION_NAMES = frozenset({"all"})
 
 
 class BaseVectorStore(ABC):
@@ -39,6 +44,39 @@ class BaseVectorStore(ABC):
     @abstractmethod
     async def get_documents(self, collection_name: str) -> list[DocumentInfo]:
         """Returns list of unique documents in a collection."""
+
+    async def get_document_list(self, collection_name: str) -> RAGDocumentList:
+        """Returns documents as API-ready list response."""
+        docs = await self.get_documents(collection_name)
+        return RAGDocumentList(
+            items=[
+                RAGDocumentItem(
+                    document_id=doc.document_id,
+                    filename=doc.filename,
+                    filesize=doc.filesize,
+                    filetype=doc.filetype,
+                    chunk_count=doc.chunk_count,
+                    additional_info=doc.additional_info,
+                )
+                for doc in docs
+            ],
+            total=len(docs),
+        )
+
+    async def create_collection(self, name: str) -> None:
+        """Validate the name and create the collection.
+
+        Raises:
+            ValueError: If name is invalid or reserved.
+        """
+        if not _COLLECTION_NAME_RE.match(name):
+            raise ValueError(
+                "Collection name must start with a letter and contain only "
+                "letters, numbers, and underscores (max 64 chars)"
+            )
+        if name.lower() in _RESERVED_COLLECTION_NAMES:
+            raise ValueError(f"'{name}' is a reserved collection name")
+        await self._ensure_collection(name)
 
     def _build_chunk_metadata(self, chunk: "DocumentPageChunk", document: Document) -> dict[str, Any]:
         """Build metadata dict for a chunk."""

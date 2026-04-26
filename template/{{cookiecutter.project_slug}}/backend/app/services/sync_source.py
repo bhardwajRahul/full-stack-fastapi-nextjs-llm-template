@@ -6,6 +6,7 @@ Contains business logic for managing RAG sync source configurations
 and triggering sync operations.
 """
 
+import json
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -14,8 +15,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import NotFoundError
 from app.db.models.sync_log import SyncLog
 from app.db.models.sync_source import SyncSource
+from app.rag.connectors import CONNECTOR_REGISTRY
+from app.repositories import sync_log as sync_log_repo
 from app.repositories import sync_source as sync_source_repo
-from app.schemas.sync_source import SyncSourceCreate, SyncSourceUpdate
+from app.schemas.sync_source import (
+    ConnectorConfigField,
+    ConnectorInfo,
+    ConnectorList,
+    SyncSourceCreate,
+    SyncSourceList,
+    SyncSourceRead,
+    SyncSourceUpdate,
+)
 
 
 class SyncSourceService:
@@ -24,12 +35,29 @@ class SyncSourceService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    def _to_read(self, s: SyncSource) -> SyncSourceRead:
+        return SyncSourceRead(
+            id=str(s.id),
+            name=s.name,
+            connector_type=s.connector_type,
+            collection_name=s.collection_name,
+            config=s.config if isinstance(s.config, dict) else json.loads(s.config) if s.config else {},
+            sync_mode=s.sync_mode,
+            schedule_minutes=s.schedule_minutes,
+            is_active=s.is_active,
+            last_sync_at=s.last_sync_at.isoformat() if s.last_sync_at else None,
+            last_sync_status=s.last_sync_status,
+            last_error=s.last_error,
+            created_at=s.created_at.isoformat() if s.created_at else None,
+        )
+
     async def list_sources(
         self,
         is_active: bool | None = None,
-    ) -> list[SyncSource]:
+    ) -> SyncSourceList:
         """List all sync sources, optionally filtered by active status."""
-        return await sync_source_repo.get_all(self.db, is_active=is_active)
+        sources = await sync_source_repo.get_all(self.db, is_active=is_active)
+        return SyncSourceList(items=[self._to_read(s) for s in sources], total=len(sources))
 
     async def get_source(self, source_id: str) -> SyncSource:
         """Get a sync source by ID.
@@ -45,7 +73,7 @@ class SyncSourceService:
             )
         return source
 
-    async def create_source(self, data: SyncSourceCreate) -> SyncSource:
+    async def create_source(self, data: SyncSourceCreate) -> SyncSourceRead:
         """Create a new sync source.
 
         Validates the connector type and its configuration before creating.
@@ -53,8 +81,6 @@ class SyncSourceService:
         Raises:
             ValueError: If connector type is unknown or config is invalid.
         """
-        from app.rag.connectors import CONNECTOR_REGISTRY
-
         if data.connector_type not in CONNECTOR_REGISTRY:
             raise ValueError(f"Unknown connector type: {data.connector_type}")
 
@@ -73,13 +99,11 @@ class SyncSourceService:
             sync_mode=data.sync_mode,
             schedule_minutes=data.schedule_minutes,
         )
-        await self.db.commit()
-        await self.db.refresh(source)
-        return source
+        return self._to_read(source)
 
     async def update_source(
         self, source_id: str, data: SyncSourceUpdate
-    ) -> SyncSource:
+    ) -> SyncSourceRead:
         """Update an existing sync source.
 
         Raises:
@@ -90,10 +114,9 @@ class SyncSourceService:
         source = await sync_source_repo.update(
             self.db, UUID(source_id), **updates
         )
-        assert source is not None  # verified above via get_source
-        await self.db.commit()
-        await self.db.refresh(source)
-        return source
+        if source is None:
+            raise NotFoundError(message="Sync source not found", details={"source_id": source_id})
+        return self._to_read(source)
 
     async def delete_source(self, source_id: str) -> None:
         """Delete a sync source.
@@ -103,7 +126,6 @@ class SyncSourceService:
         """
         await self.get_source(source_id)  # verify exists
         await sync_source_repo.delete(self.db, UUID(source_id))
-        await self.db.commit()
 
     async def trigger_sync(self, source_id: str) -> SyncLog:
         """Trigger a manual sync for a source. Returns the created SyncLog.
@@ -113,18 +135,13 @@ class SyncSourceService:
         """
         source = await self.get_source(source_id)
 
-        from app.repositories import sync_log as sync_log_repo
-
-        log = await sync_log_repo.create(
+        return await sync_log_repo.create(
             self.db,
             source=source.connector_type,
             collection_name=source.collection_name,
             mode=source.sync_mode,
+            sync_source_id=source.id,
         )
-        log.sync_source_id = source.id
-        await self.db.commit()
-        await self.db.refresh(log)
-        return log
 
     async def update_after_sync(
         self,
@@ -140,7 +157,23 @@ class SyncSourceService:
             last_sync_status=status,
             last_error=error,
         )
-        await self.db.commit()
+
+    @staticmethod
+    def list_connectors() -> ConnectorList:
+        """List available connector types with their config schemas."""
+        items = []
+        for _connector_type, connector_cls in CONNECTOR_REGISTRY.items():
+            schema_fields = {
+                field_name: ConnectorConfigField(**field_spec)
+                for field_name, field_spec in connector_cls.CONFIG_SCHEMA.items()
+            }
+            items.append(ConnectorInfo(
+                type=connector_cls.CONNECTOR_TYPE,
+                name=connector_cls.DISPLAY_NAME,
+                config_schema=schema_fields,
+                enabled=True,
+            ))
+        return ConnectorList(items=items)
 
 
 {%- elif cookiecutter.use_sqlite %}
@@ -150,6 +183,8 @@ Contains business logic for managing RAG sync source configurations
 and triggering sync operations.
 """
 
+import asyncio
+import json
 from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
@@ -157,8 +192,18 @@ from sqlalchemy.orm import Session
 from app.core.exceptions import NotFoundError
 from app.db.models.sync_log import SyncLog
 from app.db.models.sync_source import SyncSource
+from app.rag.connectors import CONNECTOR_REGISTRY
+from app.repositories import sync_log as sync_log_repo
 from app.repositories import sync_source as sync_source_repo
-from app.schemas.sync_source import SyncSourceCreate, SyncSourceUpdate
+from app.schemas.sync_source import (
+    ConnectorConfigField,
+    ConnectorInfo,
+    ConnectorList,
+    SyncSourceCreate,
+    SyncSourceList,
+    SyncSourceRead,
+    SyncSourceUpdate,
+)
 
 
 class SyncSourceService:
@@ -167,12 +212,29 @@ class SyncSourceService:
     def __init__(self, db: Session):
         self.db = db
 
+    def _to_read(self, s: SyncSource) -> SyncSourceRead:
+        return SyncSourceRead(
+            id=str(s.id),
+            name=s.name,
+            connector_type=s.connector_type,
+            collection_name=s.collection_name,
+            config=s.config if isinstance(s.config, dict) else json.loads(s.config) if s.config else {},
+            sync_mode=s.sync_mode,
+            schedule_minutes=s.schedule_minutes,
+            is_active=s.is_active,
+            last_sync_at=s.last_sync_at.isoformat() if s.last_sync_at else None,
+            last_sync_status=s.last_sync_status,
+            last_error=s.last_error,
+            created_at=s.created_at.isoformat() if s.created_at else None,
+        )
+
     def list_sources(
         self,
         is_active: bool | None = None,
-    ) -> list[SyncSource]:
+    ) -> SyncSourceList:
         """List all sync sources, optionally filtered by active status."""
-        return sync_source_repo.get_all(self.db, is_active=is_active)
+        sources = sync_source_repo.get_all(self.db, is_active=is_active)
+        return SyncSourceList(items=[self._to_read(s) for s in sources], total=len(sources))
 
     def get_source(self, source_id: str) -> SyncSource:
         """Get a sync source by ID.
@@ -188,7 +250,7 @@ class SyncSourceService:
             )
         return source
 
-    def create_source(self, data: SyncSourceCreate) -> SyncSource:
+    def create_source(self, data: SyncSourceCreate) -> SyncSourceRead:
         """Create a new sync source.
 
         Validates the connector type and its configuration before creating.
@@ -196,8 +258,6 @@ class SyncSourceService:
         Raises:
             ValueError: If connector type is unknown or config is invalid.
         """
-        from app.rag.connectors import CONNECTOR_REGISTRY
-
         if data.connector_type not in CONNECTOR_REGISTRY:
             raise ValueError(f"Unknown connector type: {data.connector_type}")
 
@@ -205,8 +265,6 @@ class SyncSourceService:
         connector = connector_cls()
 
         # validate_config is async on the base class; for SQLite we run it synchronously
-        import asyncio
-
         loop = asyncio.new_event_loop()
         try:
             is_valid, error = loop.run_until_complete(
@@ -227,13 +285,11 @@ class SyncSourceService:
             sync_mode=data.sync_mode,
             schedule_minutes=data.schedule_minutes,
         )
-        self.db.commit()
-        self.db.refresh(source)
-        return source
+        return self._to_read(source)
 
     def update_source(
         self, source_id: str, data: SyncSourceUpdate
-    ) -> SyncSource:
+    ) -> SyncSourceRead:
         """Update an existing sync source.
 
         Raises:
@@ -242,10 +298,9 @@ class SyncSourceService:
         self.get_source(source_id)  # verify exists
         updates = data.model_dump(exclude_unset=True)
         source = sync_source_repo.update(self.db, source_id, **updates)
-        assert source is not None  # verified above via get_source
-        self.db.commit()
-        self.db.refresh(source)
-        return source
+        if source is None:
+            raise NotFoundError(message="Sync source not found", details={"source_id": source_id})
+        return self._to_read(source)
 
     def delete_source(self, source_id: str) -> None:
         """Delete a sync source.
@@ -255,7 +310,6 @@ class SyncSourceService:
         """
         self.get_source(source_id)  # verify exists
         sync_source_repo.delete(self.db, source_id)
-        self.db.commit()
 
     def trigger_sync(self, source_id: str) -> SyncLog:
         """Trigger a manual sync for a source. Returns the created SyncLog.
@@ -265,18 +319,13 @@ class SyncSourceService:
         """
         source = self.get_source(source_id)
 
-        from app.repositories import sync_log as sync_log_repo
-
-        log = sync_log_repo.create(
+        return sync_log_repo.create(
             self.db,
             source=source.connector_type,
             collection_name=source.collection_name,
             mode=source.sync_mode,
+            sync_source_id=source.id,
         )
-        log.sync_source_id = source.id
-        self.db.commit()
-        self.db.refresh(log)
-        return log
 
     def update_after_sync(
         self,
@@ -292,7 +341,23 @@ class SyncSourceService:
             last_sync_status=status,
             last_error=error,
         )
-        self.db.commit()
+
+    @staticmethod
+    def list_connectors() -> ConnectorList:
+        """List available connector types with their config schemas."""
+        items = []
+        for _connector_type, connector_cls in CONNECTOR_REGISTRY.items():
+            schema_fields = {
+                field_name: ConnectorConfigField(**field_spec)
+                for field_name, field_spec in connector_cls.CONFIG_SCHEMA.items()
+            }
+            items.append(ConnectorInfo(
+                type=connector_cls.CONNECTOR_TYPE,
+                name=connector_cls.DISPLAY_NAME,
+                config_schema=schema_fields,
+                enabled=True,
+            ))
+        return ConnectorList(items=items)
 
 
 {%- endif %}
